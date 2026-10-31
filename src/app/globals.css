@@ -304,3 +304,8 @@ a.btn.primary { background: var(--you); color: #1b1404; }
 .friends .gone input { width: 84px; padding: 4px 8px; }
 fieldset.manual .row { flex-wrap: wrap; align-items: end; }
 fieldset.manual label { min-width: 130px; }
+.hud-world .hw-list { max-height: min(52vh, 460px); overflow-y: auto; }
+.hud-world li.any .hw-like { color: #8fe3c8; }
+.aw-list { margin: 8px 0 0; padding-left: 26px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.aw-list li { display: grid; grid-template-columns: 1fr auto 44px; gap: 10px; }
+.all-world summary { cursor: pointer; font-weight: 600; }

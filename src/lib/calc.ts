@@ -16,6 +16,7 @@ export interface LifeInput {
   color: string;               // цвет своей звезды
   style: StarStyle;
   compare: CountryCode[];      // средние люди других стран в «Моей гонке»
+  world?: string[];            // «ты в стране X» для любых стран мира (ISO-коды, данные PIP)
   periods: Period[];           // подробный путь (по желанию)
   events: LifeEvent[];         // прочие события
 }

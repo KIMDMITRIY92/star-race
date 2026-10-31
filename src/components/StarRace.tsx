@@ -14,6 +14,8 @@ import { childPath, medianLife } from "@/lib/life";
 import { PRESETS, WORLD_CODES, WORLD_Y0, WORLD_Y1, countryName, fmtGdp, ranks, worldSpec } from "@/lib/worldRace";
 import { WORLD } from "@/lib/world";
 import { Music, type Sfx } from "@/lib/audio";
+import { PIP } from "@/lib/pip";
+import { PIP_CODES, pipPct } from "@/lib/worldPlace";
 import { REL_LABELS, alignByYear, eventsByYear, inviteLink, leaveOf, manualMember, readInvite, relName, type Member, type Rel } from "@/lib/family";
 import { createShort, initTelegram, isTelegram, resolveShort, shareLink, shortUrl } from "@/lib/links";
 import { ClipRecorder, pickFormat, type Overlay } from "@/lib/recorder";
@@ -119,6 +121,7 @@ export default function StarRace() {
   const [preset, setPreset] = useState("region");
   const [search, setSearch] = useState("");
   const [future, setFuture] = useState(true);
+  const [perFamily, setPerFamily] = useState(false);
   const [feed, setFeed] = useState<Feed[]>([]);
   const [sound, setSound] = useState(() => { try { return localStorage.getItem("starRace.sound") !== "off"; } catch { return true; } });
   const musicRef = useRef<Music | null>(null);
@@ -150,6 +153,8 @@ export default function StarRace() {
   }, [input, friends, screen, saved.input]);
 
   const path: PathResult = useMemo(() => computePath(input), [input]);
+  // сколько человек живёт на этот доход в год возраста a: ты + супруг(а) + дети до 18 (если включено «на семью»)
+  const famN = (a: number) => !perFamily ? 1 : 1 + (input.marriedAt !== null && a >= input.marriedAt ? 1 : 0) + input.kidsAt.filter(k => a >= k && a < k + 18).length;
   const world = useMemo(() => placeEverywhere(input.sex, path.incomePpp), [input.sex, path.incomePpp]);
 
   const spec: RaceSpec | null = useMemo(() => {
@@ -177,6 +182,10 @@ export default function StarRace() {
         ...input.compare.filter(o => o !== input.country).map(o => ({
           short: COUNTRIES[o].short, full: `${man ? "Средний мужчина" : "Средняя женщина"}, ${COUNTRIES[o].name} — по меркам страны «${c.short}»`,
           color: pick(COUNTRY_COLORS[o]), values: foreignMedianPath(input.country, o, input.sex, S, E), events: [],
+        })),
+        ...(input.world ?? []).filter(iso => PIP[iso]).map(iso => ({
+          short: `Ты · ${countryName(iso)}`, full: `Ты в стране «${countryName(iso)}» — место среди всех жителей по доходу на человека (Всемирный банк, ${PIP[iso].y})`,
+          color: pick(ALT[(used.length + 2) % ALT.length]), values: ages.map((a, i) => pipPct(iso, path.youPpp[Math.min(i, path.youPpp.length - 1)] / famN(a)) ?? 0), events: [],
         })),
         { short: input.name || "Ты", full: `${input.name || "Ты"} — твой путь${E > A ? " (после сегодняшнего дня — прогноз)" : ""}`, color: input.color, hero: true, style: input.style, values: heroVals, events: evs(heroEv, true) },
       ];
@@ -220,7 +229,7 @@ export default function StarRace() {
       };
     }
     return worldSpec(worldCodes, worldK, ISO[input.country], input.color);
-  }, [screen, mode, input, path, friends, worldCodes, worldK, future]);
+  }, [screen, mode, input, path, friends, worldCodes, worldK, future, perFamily]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // движок
   useEffect(() => {
@@ -294,6 +303,11 @@ export default function StarRace() {
   const monthNow = Math.min(11, Math.floor((pos.t - Math.floor(pos.t + 1e-6)) * 12 + 1e-6));
   const yi = Math.min(path.youPpp.length - 1, Math.max(0, Math.floor(pos.t + 1e-6)));
   const liveWorld = useMemo(() => COUNTRY_ORDER.map(c => placeIn(c, input.sex, path.youPpp[yi])).sort((a, b) => b.p - a.p), [input.sex, path.youPpp, yi]);
+  // любые страны мира: место среди всех жителей
+  const liveAny = (input.world ?? []).map(iso => ({ iso, p: pipPct(iso, path.youPpp[yi] / famN(ageNow)) ?? 0 })).sort((a, b) => b.p - a.p);
+  const [worldQ, setWorldQ] = useState("");
+  const nowN = famN(path.age);
+  const allWorld = PIP_CODES.map(iso => ({ iso, p: pipPct(iso, path.incomePpp / nowN) ?? 0 })).sort((a, b) => b.p - a.p);
   const ownNow = liveWorld.find(w => w.code === input.country);
   // таблица мест в гонке стран за текущий год
   const wk = Math.min(WORLD_Y1 - WORLD_Y0, Math.max(0, Math.floor(pos.t + 1e-6)));
@@ -473,8 +487,19 @@ export default function StarRace() {
       </div>
     </div>
   );
+  const top10n = allWorld.filter(w => w.p >= 90).length, top50n = allWorld.filter(w => w.p >= 50).length;
   const worldPanel = (
     <div className="ov-body">
+      <div className="ov-hero">
+        <div className="k">Весь мир · {allWorld.length} стран</div>
+        <p className="phrase">С таким доходом ты был(а) бы выше середины в {top50n} {plural(top50n, "стране", "странах", "странах")} из {allWorld.length}, а в верхних 10% — в {top10n}.</p>
+        <div className="chips"><button className={perFamily ? "chip" : "chip on"} onClick={() => setPerFamily(false)}>Весь доход — на тебя одного</button><button className={perFamily ? "chip on" : "chip"} onClick={() => setPerFamily(true)}>Поделить на семью ({1 + (input.marriedAt !== null && path.age >= input.marriedAt ? 1 : 0) + input.kidsAt.filter(k => path.age >= k && path.age < k + 18).length} чел.)</button></div>
+        <p className="est">Сравнение со всеми жителями страны — по доходу или потреблению на человека (Всемирный банк, PIP, последний опрос страны), пересчёт по паритету цен ≈. Если на твой доход живёт семья, честнее делить его на всех — доход второго взрослого здесь не учитывается. Места тут выше, чем среди работающих в 6 подробных странах ниже, потому что среди жителей есть дети и пенсионеры.</p>
+      </div>
+      <details className="all-world">
+        <summary>Все страны по порядку</summary>
+        <ol className="aw-list">{allWorld.map(w => <li key={w.iso}><span>{countryName(w.iso)}</span><span className="num">топ-{Math.max(1, Math.round(100 - w.p))}%</span><span className="est">{PIP[w.iso].y}</span></li>)}</ol>
+      </details>
       <p className="est">Твой доход по ценам (паритету покупательной способности) в каждой стране — место среди работающих {who}.</p>
       <div className="ov-grid">
         {world.map(w => {
@@ -519,7 +544,7 @@ export default function StarRace() {
     <div className="wrap">
       <header className="top">
         <div>
-          <span className="badge">Версия 0.8 · 3D · {COUNTRY_ORDER.length} стран подробно · {WORLD_CODES.length} в гонке стран</span>
+          <span className="badge">Версия 0.9 · 3D · {COUNTRY_ORDER.length} стран подробно · {WORLD_CODES.length} в гонке стран</span>
           <h1>Звёздная гонка</h1>
         </div>
       </header>
@@ -614,6 +639,16 @@ export default function StarRace() {
                         <span className="hw-r num">топ-{w.top}%</span>
                       </div>
                       {w.like && <div className="hw-like">на уровне: <b>{w.like}</b></div>}
+                    </li>
+                  ))}
+                  {liveAny.map(w => (
+                    <li key={w.iso} data-k={w.iso} className="any">
+                      <div className="hw-line">
+                        <span className="hw-c">{countryName(w.iso)}</span>
+                        <span className="hw-bar"><i style={{ width: `${Math.max(3, w.p)}%`, background: "rgba(140,230,200,0.6)" }} /></span>
+                        <span className="hw-r num">топ-{Math.max(1, Math.round(100 - w.p))}%</span>
+                      </div>
+                      <div className="hw-like">среди всех жителей</div>
                     </li>
                   ))}</ul>
                 )}
@@ -744,8 +779,16 @@ export default function StarRace() {
               <div className="chips">
                 <button className={future ? "chip on" : "chip"} aria-pressed={future} onClick={() => setFuture(v => !v)}>Прогноз: продолжить путь до пенсии</button>
               </div>
+              <div className="k">Ты в любой стране мира ({PIP_CODES.length} стран)</div>
+              <form className="row" onSubmit={e => { e.preventDefault(); const q = worldQ.trim().toLowerCase(); const iso = PIP_CODES.find(c => countryName(c).toLowerCase() === q) ?? PIP_CODES.find(c => countryName(c).toLowerCase().startsWith(q)); if (iso && !(input.world ?? []).includes(iso) && starCount < MAX_STARS) setInput(s => ({ ...s, world: [...(s.world ?? []), iso] })); setWorldQ(""); }}>
+                <label className="wide">Добавить страну — увидишь, где летела бы твоя звезда там<input id="me-world" list="me-world-list" type="text" value={worldQ} placeholder="Германия, Турция, Япония…" onChange={e => setWorldQ(e.target.value)} /></label>
+                <datalist id="me-world-list">{PIP_CODES.filter(c => !(input.world ?? []).includes(c)).map(c => <option key={c} value={countryName(c)} />)}</datalist>
+                <button type="submit">Добавить</button>
+              </form>
+              {(input.world ?? []).length > 0 && <div className="chips">{(input.world ?? []).map(c => <button key={c} className="chip on" onClick={() => setInput(s => ({ ...s, world: (s.world ?? []).filter(x => x !== c) }))} aria-label={`Убрать ${countryName(c)}`}>{countryName(c)} ✕</button>)}</div>}
               <div className="k">Средний человек другой страны</div>
               <div className="chips">{COUNTRY_ORDER.filter(c => c !== input.country).map(c => <button key={c} className={input.compare.includes(c) ? "chip on" : "chip"} aria-pressed={input.compare.includes(c)} onClick={() => toggleCompare(c)}>{COUNTRIES[c].name}</button>)}</div>
+              <div className="chips"><button className={perFamily ? "chip on" : "chip"} aria-pressed={perFamily} onClick={() => setPerFamily(v => !v)}>Мировые сравнения: делить доход на семью</button></div>
               <p className="est">Медиана делится на два пути: «вуз» и «работа с 18» — по доле поступающих и разнице зарплат с высшим и без (≈ модель). Свадьба, дети, взросление детей и пенсия — по средним цифрам страны. Твои дети в 18 лет отделяются в свою звезду.</p>
             </div>
           ) : (
