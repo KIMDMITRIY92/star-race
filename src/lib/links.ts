@@ -3,8 +3,8 @@
 // star_link_create / star_link_get, прямой доступ к таблице закрыт (RLS без политик).
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://oivdloxlrxvsutyfgvsu.supabase.co";
 const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || "sb_publishable_N7XTy7Q9yE-mySI8cRnzOQ_kLUYeYzB";
-// Ссылка на Mini App, например https://t.me/StarRaceBot/race — задаётся в Vercel после создания бота.
-export const TG_APP = process.env.NEXT_PUBLIC_TG_APP || "";
+// Главное Mini App бота: https://t.me/StarLife2026_bot?startapp=<id> (можно переопределить переменной в Vercel).
+export const TG_APP = process.env.NEXT_PUBLIC_TG_APP || "https://t.me/StarLife2026_bot";
 
 async function rpc<T>(fn: string, body: object): Promise<T | null> {
   try {
